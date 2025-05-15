@@ -1,7 +1,52 @@
 import numpy as np
 from sklearn.datasets import fetch_california_housing
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from config import cfg
+
+
+class LinearRegression:
+    def __init__(self, weights=None, bias=1, lr=0.001):
+        self.bias = bias
+        self.weights = None
+        self.input = None
+        self.lr = 0.001
+
+        if weights is None:
+            self.weights = np.random.uniform(-1, 1)
+
+        print(f"Init with weight: {self.weights}")
+
+    def forward(self, x):
+        self.input = x
+        return np.dot(x, self.weights) + self.bias
+
+    def step(self, grad):
+        backward_grad = self.weights * grad
+        self.weights = self.weights - self.lr * (self.input * grad)
+        self.bias = self.bias - self.lr * grad
+        return backward_grad
+
+    def __call__(self, x):
+        return self.forward(x)
+
+
+class MSE:
+    def __init__(self):
+        self.y_pred = None
+        self.y = None
+
+    def forward(self, y_pred, y):
+        self.y_pred, self.y = y_pred, y
+        return np.mean((y_pred - y) ** 2)
+
+    def backward(self):
+        grad = 2 * (self.y_pred - self.y)
+        return grad
+
+    def __call__(self, y, y_pred):
+        return self.forward(y, y_pred)
 
 
 def load_data(train_split, val_split):
@@ -14,10 +59,10 @@ def load_data(train_split, val_split):
     # Use the same shuffled indices for both features and targets to maintain alignment
     X_shuffled = X[indices]
     y_shuffled = y[indices]
-    
-    # check if data is actually shuffled    
+
+    # check if data is actually shuffled
     assert not np.array_equal(X_shuffled[0], X[0])
-    
+
     # Calculate split sizes
     num_samples = len(X)
     num_train = int(num_samples * train_split)
@@ -33,19 +78,108 @@ def load_data(train_split, val_split):
     X_test = X_shuffled[num_train + num_val :]
     y_test = y_shuffled[num_train + num_val :]
 
+    # Compute normalization parameters from training data only
+    X_train_mean = np.mean(X_train, axis=0)
+    X_train_std = np.std(X_train, axis=0)
+    y_train_mean = np.mean(y_train)
+    y_train_std = np.std(y_train)
+
+    # Normalize all sets using training set statistics
+    X_train_normed = (X_train - X_train_mean) / X_train_std
+    X_val_normed = (X_val - X_train_mean) / X_train_std
+    X_test_normed = (X_test - X_train_mean) / X_train_std
+
+    y_train_normed = (y_train - y_train_mean) / y_train_std
+    y_val_normed = (y_val - y_train_mean) / y_train_std
+    y_test_normed = (y_test - y_train_mean) / y_train_std
+
     print(f"Train set size: {len(X_train)}")
     print(f"Validation set size: {len(X_val)}")
     print(f"Test set size: {len(X_test)}")
 
-    return (X_train, y_train), (X_val, y_val), (X_test, y_test)
+    return (
+        list(zip(X_train_normed, y_train_normed)),
+        list(zip(X_val_normed, y_val_normed)),
+        list(zip(X_test_normed, y_test_normed)),
+    )
 
 
-def train():
-    pass
+def train_manual(train_set, val_set, epochs, lr):
+    n_params = len(train_set[0][0])
+
+    weights = np.random.normal(-1, 1, n_params)
+    bias = 1
+
+    train_loss = []
+    # val_loss = []
+
+    for epoch in tqdm(range(epochs), desc="Training", unit="epoch", leave=False):
+        running_loss = 0.0
+        for x, y in train_set[:100]:
+            # make linear prediction
+            y_pred = 0.0
+            for i in range(n_params):
+                y_pred += weights[i] * x[i]
+
+            y_pred = y_pred + bias
+            # calculate MSE
+            loss = (y_pred - y) ** 2
+            running_loss += loss
+
+            # update weights
+            for i in range(n_params):
+                weight_grad = x[i] * 2 * (y_pred - y)
+                weights[i] = weights[i] - lr * weight_grad
+
+            # update bias
+            bias_grad = 2 * (y - y_pred)
+            bias = bias - lr * bias_grad
+
+        train_loss.append(running_loss / len(train_set))
+
+        # make sample prediction
+        x, y = train_set[0]
+        y_pred = 0.0
+        for i in range(n_params):
+            y_pred += weights[i] * x[i]
+        y_pred += y_pred + bias
+        print(f"Prediction: {y_pred}, True Value: {y}")
+
+    return train_loss
 
 
-def plot():
-    pass
+def train(model, loss_fn, train_set, val_set, epochs):
+    train_loss = []
+    # val_loss = []
+    for epoch in tqdm(range(epochs)):
+        running_loss = 0.0
+        for x, y in train_set:
+            # make prediction
+            y_pred = model(x)
+
+            # calculate loss
+            loss = loss_fn(y_pred, y)
+            running_loss += loss
+
+            # get grad of loss function
+            grad = loss_fn.backward()
+            # update model
+            model.step(grad)
+
+        normalised_loss = running_loss / len(train_set)
+        train_loss.append(normalised_loss)
+
+    return train_loss
+
+
+def plot_results(train_loss):
+    plt.plot(train_loss, label="Training Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Over Epochs")
+    plt.legend()
+    plt.savefig("results/training_loss_plot.png")
+    plt.show()
 
 
 def evaluate():
@@ -58,6 +192,15 @@ def main():
     np.random.seed(cfg.seed)
 
     train_set, val_set, test_set = load_data(cfg.train_split, cfg.val_split)
+
+    model = LinearRegression(lr=cfg.lr)
+    loss_fn = MSE()
+
+    # train_loss = train_manual(train_set, val_set, cfg.epochs, cfg.lr)
+
+    train_loss = train(model, loss_fn, train_set, val_set, cfg.epochs)
+    print("train loss", train_loss)
+    plot_results(train_loss)
 
 
 if __name__ == "__main__":
