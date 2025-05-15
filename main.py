@@ -2,33 +2,27 @@ import numpy as np
 from sklearn.datasets import fetch_california_housing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from sklearn.linear_model import LinearRegression as sklearn_LinearRegression
-from sklearn.metrics import mean_squared_error
 
 from config import cfg
 
 
 class LinearRegression:
-    def __init__(self, weights=None, bias=1, lr=0.001):
-        self.bias = bias
-        self.weights = None
+    def __init__(self, n_params, weights=None, bias=1, lr=0.001):
         self.input = None
-        self.lr = 0.001
+        self.bias = bias
+        self.weights = weights
+        self.lr = lr
 
         if weights is None:
-            self.weights = np.random.uniform(-1, 1)
-
-        print(f"Init with weight: {self.weights}")
+            self.weights = np.random.uniform(-1, 1, n_params)
 
     def forward(self, x):
         self.input = x
         return np.dot(x, self.weights) + self.bias
 
     def step(self, grad):
-        backward_grad = self.weights * grad
-        self.weights = self.weights - self.lr * (self.input * grad)
+        self.weights = self.weights - self.lr * grad * self.input
         self.bias = self.bias - self.lr * grad
-        return backward_grad
 
     def __call__(self, x):
         return self.forward(x)
@@ -40,15 +34,20 @@ class MSE:
         self.y = None
 
     def forward(self, y_pred, y):
-        self.y_pred, self.y = y_pred, y
+        self.y_pred = y_pred
+        self.y = y
         return np.mean((y_pred - y) ** 2)
 
     def backward(self):
-        grad = 2 * (self.y_pred - self.y)
+        grad = (
+            2 * (self.y_pred - self.y) / len(self.y)
+            if hasattr(self.y, "__len__")
+            else 2 * (self.y_pred - self.y)
+        )
         return grad
 
-    def __call__(self, y, y_pred):
-        return self.forward(y, y_pred)
+    def __call__(self, y_pred, y):
+        return self.forward(y_pred, y)
 
 
 def load_data(train_split, val_split):
@@ -106,50 +105,6 @@ def load_data(train_split, val_split):
     )
 
 
-def train_manual(train_set, val_set, epochs, lr):
-    n_params = len(train_set[0][0])
-
-    weights = np.random.normal(-1, 1, n_params)
-    bias = 1
-
-    train_loss = []
-    # val_loss = []
-
-    for epoch in tqdm(range(epochs), desc="Training", unit="epoch", leave=False):
-        running_loss = 0.0
-        for x, y in train_set[:100]:
-            # make linear prediction
-            y_pred = 0.0
-            for i in range(n_params):
-                y_pred += weights[i] * x[i]
-
-            y_pred = y_pred + bias
-            # calculate MSE
-            loss = (y_pred - y) ** 2
-            running_loss += loss
-
-            # update weights
-            for i in range(n_params):
-                weight_grad = x[i] * 2 * (y_pred - y)
-                weights[i] = weights[i] - lr * weight_grad
-
-            # update bias
-            bias_grad = 2 * (y - y_pred)
-            bias = bias - lr * bias_grad
-
-        train_loss.append(running_loss / len(train_set))
-
-        # make sample prediction
-        x, y = train_set[0]
-        y_pred = 0.0
-        for i in range(n_params):
-            y_pred += weights[i] * x[i]
-        y_pred += y_pred + bias
-        print(f"Prediction: {y_pred}, True Value: {y}")
-
-    return train_loss
-
-
 def train(model, loss_fn, train_set, val_set, epochs):
     train_loss = []
     # val_loss = []
@@ -171,6 +126,11 @@ def train(model, loss_fn, train_set, val_set, epochs):
         normalised_loss = running_loss / len(train_set)
         train_loss.append(normalised_loss)
 
+        # make sample prediction
+        x, y = train_set[0]
+        y_pred = model(x)
+        print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
+
     return train_loss
 
 
@@ -181,58 +141,23 @@ def plot_results(train_loss):
     plt.title("Training Loss Over Epochs")
     plt.legend()
     plt.savefig("results/training_loss_plot.png")
-    plt.show()
-
-
-def evaluate():
-    pass
-
-
-def sklearn_linear_regression(train_set, val_set, test_set):
-    X_train, y_train = zip(*train_set)
-    X_val, y_val = zip(*val_set)
-    X_test, y_test = zip(*test_set)
-
-    model = sklearn_LinearRegression()
-    model.fit(X_train, y_train)
-    y_pred_train = model.predict(X_train)
-    y_pred_val = model.predict(X_val)
-    y_pred_test = model.predict(X_test)
-
-    # Calculate MSE loss
-    train_mse = mean_squared_error(y_train, y_pred_train)
-    val_mse = mean_squared_error(y_val, y_pred_val)
-    test_mse = mean_squared_error(y_test, y_pred_test)
-
-    plt.figure(figsize=(10, 5))
-    plt.plot([train_mse, val_mse, test_mse], label=['Training MSE', 'Validation MSE', 'Testing MSE'])
-    plt.xlabel('Sets')
-    plt.ylabel('MSE Loss')
-    plt.title('MSE Loss for Training, Validation, and Testing Sets')
-    plt.legend()
-    plt.savefig("results/sklearn_linear_regression_mse_loss.png")
-    plt.show()
-
-    return test_mse
 
 
 def main():
-    print("Hello from regression-from-scratch!")
-
     np.random.seed(cfg.seed)
 
     train_set, val_set, test_set = load_data(cfg.train_split, cfg.val_split)
 
-    model = LinearRegression(lr=cfg.lr)
+    n_params = len(train_set[0][0])
+    model = LinearRegression(n_params=n_params, lr=cfg.lr)
     loss_fn = MSE()
 
     # train_loss = train_manual(train_set, val_set, cfg.epochs, cfg.lr)
 
     train_loss = train(model, loss_fn, train_set, val_set, cfg.epochs)
-    print("train loss", train_loss)
+    print("train loss", train_loss[-1])
     plot_results(train_loss)
 
-    sklearn_linear_regression(train_set, val_set, test_set)
 
 if __name__ == "__main__":
     main()

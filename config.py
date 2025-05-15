@@ -11,5 +11,5 @@ cfg.val_split = 0.15
 
 
 # training
-cfg.lr = 0.00001
+cfg.lr = 0.0001
 cfg.epochs = 5
