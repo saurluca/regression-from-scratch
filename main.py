@@ -14,10 +14,6 @@ class LinearRegression:
         self.weights = weights
         self.lr = lr
 
-        print(f"MODEL Initial weights: {weights}")
-        print(f"Initial bias: {bias}")
-        print(f"Learning rate: {lr}")
-
         if weights is None:
             print("Initial weights are None, generating random weights")
             self.weights = np.random.uniform(-1, 1, n_params)
@@ -42,14 +38,10 @@ class MSE:
     def forward(self, y_pred, y):
         self.y_pred = y_pred
         self.y = y
-        return np.mean((y_pred - y) ** 2)
+        return (y_pred - y) ** 2
 
     def backward(self):
-        grad = (
-            2 * (self.y_pred - self.y) / len(self.y)
-            if hasattr(self.y, "__len__")
-            else 2 * (self.y_pred - self.y)
-        )
+        grad = 2 * (self.y_pred - self.y)
         return grad
 
     def __call__(self, y_pred, y):
