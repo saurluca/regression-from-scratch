@@ -2,6 +2,8 @@ import numpy as np
 from sklearn.datasets import fetch_california_housing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from sklearn.linear_model import LinearRegression as sklearn_LinearRegression
+from sklearn.metrics import mean_squared_error
 
 from config import cfg
 
@@ -186,6 +188,34 @@ def evaluate():
     pass
 
 
+def sklearn_linear_regression(train_set, val_set, test_set):
+    X_train, y_train = zip(*train_set)
+    X_val, y_val = zip(*val_set)
+    X_test, y_test = zip(*test_set)
+
+    model = sklearn_LinearRegression()
+    model.fit(X_train, y_train)
+    y_pred_train = model.predict(X_train)
+    y_pred_val = model.predict(X_val)
+    y_pred_test = model.predict(X_test)
+
+    # Calculate MSE loss
+    train_mse = mean_squared_error(y_train, y_pred_train)
+    val_mse = mean_squared_error(y_val, y_pred_val)
+    test_mse = mean_squared_error(y_test, y_pred_test)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot([train_mse, val_mse, test_mse], label=['Training MSE', 'Validation MSE', 'Testing MSE'])
+    plt.xlabel('Sets')
+    plt.ylabel('MSE Loss')
+    plt.title('MSE Loss for Training, Validation, and Testing Sets')
+    plt.legend()
+    plt.savefig("results/sklearn_linear_regression_mse_loss.png")
+    plt.show()
+
+    return test_mse
+
+
 def main():
     print("Hello from regression-from-scratch!")
 
@@ -202,6 +232,7 @@ def main():
     print("train loss", train_loss)
     plot_results(train_loss)
 
+    sklearn_linear_regression(train_set, val_set, test_set)
 
 if __name__ == "__main__":
     main()
