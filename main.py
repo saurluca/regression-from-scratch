@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.datasets import fetch_california_housing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import time
 
 from config import cfg
 
@@ -13,7 +14,12 @@ class LinearRegression:
         self.weights = weights
         self.lr = lr
 
+        print(f"MODEL Initial weights: {weights}")
+        print(f"Initial bias: {bias}")
+        print(f"Learning rate: {lr}")
+
         if weights is None:
+            print("Initial weights are None, generating random weights")
             self.weights = np.random.uniform(-1, 1, n_params)
 
     def forward(self, x):
@@ -105,16 +111,18 @@ def load_data(train_split, val_split):
     )
 
 
-def train_manual(train_set, val_set, epochs, lr):
+def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1):
     n_params = len(train_set[0][0])
 
-    weights = np.random.normal(-1, 1, n_params)
-    bias = 1
+    if weights is None:
+        weights = np.random.uniform(-1, 1, n_params)
+        
+    if bias is None:
+        bias = 1
 
     train_loss = []
-    # val_loss = []
 
-    for epoch in tqdm(range(epochs), desc="Training", unit="epoch", leave=False):
+    for epoch in tqdm(range(epochs)):
         running_loss = 0.0
         for x, y in train_set:
             # make linear prediction
@@ -123,35 +131,40 @@ def train_manual(train_set, val_set, epochs, lr):
                 y_pred += weights[i] * x[i]
 
             y_pred = y_pred + bias
+            
             # calculate MSE
             loss = (y_pred - y) ** 2
             running_loss += loss
+            
+            loss_grad = 2 * (y_pred - y)
 
             # update weights
             for i in range(n_params):
-                weight_grad = x[i] * 2 * (y_pred - y)
+                weight_grad = x[i] * loss_grad
                 weights[i] = weights[i] - lr * weight_grad
 
             # update bias
-            bias_grad = 2 * (y - y_pred)
+            bias_grad = loss_grad
             bias = bias - lr * bias_grad
 
-        train_loss.append(running_loss / len(train_set))
+        normalised_loss = running_loss / len(train_set)
+        train_loss.append(normalised_loss)
 
         # make sample prediction
         x, y = train_set[0]
         y_pred = 0.0
         for i in range(n_params):
             y_pred += weights[i] * x[i]
-        y_pred += y_pred + bias
-        print(f"Prediction: {y_pred}, True Value: {y}")
+        y_pred = y_pred + bias
+        # print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
 
     return train_loss
 
 
-def train(model, loss_fn, train_set, val_set, epochs):
+def train_vectorised(model, loss_fn, train_set, val_set, epochs):
     train_loss = []
     # val_loss = []
+
     for epoch in tqdm(range(epochs)):
         running_loss = 0.0
         for x, y in train_set:
@@ -164,6 +177,7 @@ def train(model, loss_fn, train_set, val_set, epochs):
 
             # get grad of loss function
             grad = loss_fn.backward()
+
             # update model
             model.step(grad)
 
@@ -173,7 +187,7 @@ def train(model, loss_fn, train_set, val_set, epochs):
         # make sample prediction
         x, y = train_set[0]
         y_pred = model(x)
-        print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
+        # print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
 
     return train_loss
 
@@ -188,21 +202,49 @@ def plot_results(train_loss):
 
 
 def main():
+    # Set random seed for reproducibility
     np.random.seed(cfg.seed)
 
     train_set, val_set, test_set = load_data(cfg.train_split, cfg.val_split)
 
     n_params = len(train_set[0][0])
-    model = LinearRegression(n_params=n_params, lr=cfg.lr)
+    
+    # Initialize random weights for manual training
+    weights_manual = np.random.uniform(-1, 1, n_params)
+    bias_manual = 1
+    
+    # Copy manual weights for vectorized training to ensure fair comparison
+    weights_vectorised = weights_manual.copy()
+    bias_vectorised = 1
+
+    # Initialize model
+    model = LinearRegression(n_params=n_params, lr=cfg.lr, weights=weights_vectorised, bias=bias_vectorised)    
     loss_fn = MSE()
 
-    train_loss = train_manual(train_set, val_set, cfg.epochs, cfg.lr)
-    
-    
+    print("Training manual model...")
+    start_time = time.time()
+    train_loss_manual = train_manual(train_set, val_set, cfg.epochs, cfg.lr, weights_manual, bias_manual)
+    manual_time = time.time() - start_time
+    print(f"Manual training took {manual_time:.2f} seconds")
 
-    # train_loss = train(model, loss_fn, train_set, val_set, cfg.epochs)
-    print("train loss", train_loss[-1])
-    plot_results(train_loss)
+    print("Training vectorised model...")
+    start_time = time.time()
+    train_loss_vectorised = train_vectorised(model, loss_fn, train_set, val_set, cfg.epochs)
+    vectorised_time = time.time() - start_time
+    print(f"Vectorised training took {vectorised_time:.2f} seconds")
+    
+    
+    print("Manual training loss:", train_loss_manual[-1])
+    print("Vectorised training loss:", train_loss_vectorised[-1])
+    
+    plt.figure(figsize=(10,6))
+    plt.plot(train_loss_manual, label="Manual Training Loss")
+    plt.plot(train_loss_vectorised, label="Vectorised Training Loss") 
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Over Epochs")
+    plt.legend()
+    plt.savefig("results/training_loss_plot.png")
 
 
 if __name__ == "__main__":
