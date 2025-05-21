@@ -122,7 +122,7 @@ def load_data(train_split, val_split):
     )
 
 
-def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1):
+def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1, verbose=False):
     n_params = len(train_set[0][0])
 
     if weights is None:
@@ -131,7 +131,8 @@ def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1):
     if bias is None:
         bias = 1
 
-    train_loss = []
+    train_loss_list = []
+    val_loss_list = []
 
     for epoch in tqdm(range(epochs)):
         running_loss = 0.0
@@ -159,20 +160,25 @@ def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1):
             bias = bias - lr * bias_grad
 
         normalised_loss = running_loss / len(train_set)
-        train_loss.append(normalised_loss)
+        train_loss_list.append(normalised_loss)
 
-        # make sample prediction
-        x, y = train_set[0]
-        y_pred = 0.0
-        for i in range(n_params):
-            y_pred += weights[i] * x[i]
-        y_pred = y_pred + bias
-        # print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
+        # evaluate on validation set
+        val_loss = evaluate_model_manual(weights, bias, val_set)
+        val_loss_list.append(val_loss)
 
-    return train_loss
+        if verbose:
+            # make sample prediction
+            x, y = train_set[0]
+            y_pred = 0.0
+            for i in range(n_params):
+                y_pred += weights[i] * x[i]
+            y_pred = y_pred + bias
+            print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
+
+    return train_loss_list, val_loss_list
 
 
-def train_vectorised(model, loss_fn, train_set, val_set, epochs):
+def train_vectorised(model, loss_fn, train_set, val_set, epochs, verbose=False):
     train_loss = []
     # val_loss = []
 
@@ -195,15 +201,16 @@ def train_vectorised(model, loss_fn, train_set, val_set, epochs):
         normalised_loss = running_loss / len(train_set)
         train_loss.append(normalised_loss)
 
-        # make sample prediction
-        x, y = train_set[0]
-        y_pred = model(x)
-        # print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
+        if verbose:
+            # make sample prediction
+            x, y = train_set[0]
+            y_pred = model(x)
+            print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
 
     return train_loss
 
 
-def train_vectorised_full(model, loss_fn, train_set, val_set, epochs):
+def train_vectorised_full_batch(model, loss_fn, train_set, val_set, epochs, verbose=False):
     train_loss_list = []
     val_loss_list = []
 
@@ -227,15 +234,16 @@ def train_vectorised_full(model, loss_fn, train_set, val_set, epochs):
         val_loss = evaluate_model_full(model, loss_fn, x_val, y_val)
 
         # log loss
-        normalised_train_loss = loss / len(train_set)
+        normalised_train_loss = loss
         train_loss_list.append(normalised_train_loss)
-        normalised_val_loss = val_loss / len(val_set)
+        normalised_val_loss = val_loss
         val_loss_list.append(normalised_val_loss)
 
-        # make sample prediction
-        x, y = x_train[0], y_train[0]
-        y_pred = model(x)
-        print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
+        if verbose: 
+            # make sample prediction
+            x, y = x_train[0], y_train[0]
+            y_pred = model(x)
+            print(f"Epoch {epoch}: Prediction: {y_pred:.4f}, True Value: {y:.4f}")
 
     return train_loss_list, val_loss_list
 
@@ -244,6 +252,20 @@ def evaluate_model_full(model, loss_fn, x_test, y_test):
     y_pred = model(x_test, no_grad=True)
     loss = loss_fn(y_pred, y_test, no_grad=True)
     return loss
+
+
+def evaluate_model_manual(weights, bias, test_set):
+    running_loss = 0.0
+    for x, y in test_set:
+        y_pred = 0.0
+        for i in range(len(weights)):
+            y_pred += weights[i] * x[i]
+        y_pred = y_pred + bias
+        loss = (y_pred - y) ** 2
+        running_loss += loss
+
+    normalised_loss = running_loss / len(test_set)
+    return normalised_loss
 
 
 def plot_results(train_loss):
@@ -255,19 +277,20 @@ def plot_results(train_loss):
     plt.savefig("results/training_loss_plot.png")
 
 
-def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised):
-    print("plotting manual vs vectorised loss")
+def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, title):
     plt.figure(figsize=(10, 6))
     plt.plot(train_loss_manual, label="Manual Training Loss")
     plt.plot(train_loss_vectorised, label="Vectorised Training Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
-    plt.title("Training Loss Over Epochs")
+    plt.title(title)
     plt.legend()
-    plt.savefig("results/manual_vs_vectorised_loss_plot.png")
+    plt.savefig(f"results/{title}_plot.png")
 
 
 def main():
+    VERBOSE = False
+    
     # Set random seed for reproducibility
     np.random.seed(cfg.seed)
 
@@ -294,21 +317,46 @@ def main():
     loss_fn = MSE(full_batch=True)
 
     print("Training manual model...")
-    train_loss_manual = train_manual(
-        train_set, val_set, cfg.epochs, cfg.lr_mini, weights_manual, bias_manual
+    train_loss_manual, val_loss_manual = train_manual(
+        train_set,
+        val_set,
+        cfg.epochs_manual,
+        cfg.lr_mini,
+        weights_manual,
+        bias_manual,
+        verbose=VERBOSE,
     )
 
     print("Training vectorised model...")
-    train_loss_vectorised, val_loss_vectorised = train_vectorised_full(
-        model, loss_fn, train_set, val_set, cfg.epochs
+    train_loss_vectorised, val_loss_vectorised = train_vectorised_full_batch(
+        model, loss_fn, train_set, val_set, cfg.epochs_full_batch, verbose=VERBOSE
     )
+    
+    print("Evaluating manual model...")
+    test_loss_manual = evaluate_model_manual(weights_manual, bias_manual, test_set)
 
-    # print("Manual training loss:", train_loss_manual[-1])
-    print("Vectorised training loss:", train_loss_vectorised[-1])
-    print("Vectorised validation loss:", val_loss_vectorised[-1])
+    print("Evaluating vectorised model...")
+    x_test = np.array([item[0] for item in test_set])
+    y_test = np.array([item[1] for item in test_set])
+    test_loss_vectorised = evaluate_model_full(model, loss_fn, x_test, y_test)
+    
+
+    print(f"Manual training loss: {train_loss_manual[-1]:.4f}")
+    print(f"Manual validation loss: {val_loss_manual[-1]:.4f}")
+    print(f"Manual test loss: {test_loss_manual:.4f}")
+
+    print(f"Vectorised training loss: {train_loss_vectorised[-1]:.4f}")
+    print(f"Vectorised validation loss: {val_loss_vectorised[-1]:.4f}")
+    print(f"Vectorised test loss: {test_loss_vectorised:.4f}")
+
+    # print number of update steps per model
+    print("Manual update steps:", len(train_loss_manual) * len(train_set))
+    print("Vectorised update steps:", cfg.epochs_full_batch)
+
     # plot_results(train_loss_vectorised)
 
-    plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised)
+    plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, "Training Loss")
+    plot_manual_vs_vectorised_loss(val_loss_manual, val_loss_vectorised, "Validation Loss")
 
 
 if __name__ == "__main__":
