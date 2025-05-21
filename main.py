@@ -210,7 +210,9 @@ def train_vectorised(model, loss_fn, train_set, val_set, epochs, verbose=False):
     return train_loss
 
 
-def train_vectorised_full_batch(model, loss_fn, train_set, val_set, epochs, verbose=False):
+def train_vectorised_full_batch(
+    model, loss_fn, train_set, val_set, epochs, verbose=False
+):
     train_loss_list = []
     val_loss_list = []
 
@@ -239,7 +241,7 @@ def train_vectorised_full_batch(model, loss_fn, train_set, val_set, epochs, verb
         normalised_val_loss = val_loss
         val_loss_list.append(normalised_val_loss)
 
-        if verbose: 
+        if verbose:
             # make sample prediction
             x, y = x_train[0], y_train[0]
             y_pred = model(x)
@@ -268,15 +270,6 @@ def evaluate_model_manual(weights, bias, test_set):
     return normalised_loss
 
 
-def plot_results(train_loss):
-    plt.plot(train_loss, label="Training Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title("Training Loss Over Epochs")
-    plt.legend()
-    plt.savefig("results/training_loss_plot.png")
-
-
 def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, title):
     plt.figure(figsize=(10, 6))
     plt.plot(train_loss_manual, label="Manual Training Loss")
@@ -288,9 +281,72 @@ def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, tit
     plt.savefig(f"results/{title}_plot.png")
 
 
+def plot_predictions_vs_actual(
+    test_set, weights_manual, bias_manual, model
+):
+    x_test = np.array([item[0] for item in test_set])
+    y_test = np.array([item[1] for item in test_set])
+
+    # Manual model predictions
+    manual_predictions = []
+    for x in x_test:
+        y_pred = 0.0
+        for i in range(len(weights_manual)):
+            y_pred += weights_manual[i] * x[i]
+        y_pred = y_pred + bias_manual
+        manual_predictions.append(y_pred)
+    manual_predictions = np.array(manual_predictions)
+
+    # Vectorised model predictions
+    vectorised_predictions = model(x_test, no_grad=True)
+
+    # Plot predictions vs actual values
+    plt.figure(figsize=(10, 6))
+
+    # Sort values for better visualization
+    sort_idx = np.argsort(y_test)
+    y_test_sorted = y_test[sort_idx]
+    manual_pred_sorted = manual_predictions[sort_idx]
+    vectorised_pred_sorted = vectorised_predictions[sort_idx]
+
+    # Plot predictions first (so they appear behind actual values)
+    plt.scatter(
+        range(len(manual_pred_sorted)),
+        manual_pred_sorted,
+        label="Manual Predictions",
+        alpha=0.5,
+        color="blue",
+        zorder=1,
+    )
+    plt.scatter(
+        range(len(vectorised_pred_sorted)),
+        vectorised_pred_sorted,
+        label="Vectorised Predictions",
+        alpha=0.5,
+        color="red",
+        zorder=1,
+    )
+
+    # Plot actual values last (so they appear on top)
+    plt.scatter(
+        range(len(y_test_sorted)),
+        y_test_sorted,
+        label="Actual Values",
+        alpha=0.5,
+        color="black",
+        zorder=2,
+    )
+
+    plt.xlabel("Sample Index (sorted by actual values)")
+    plt.ylabel("Value")
+    plt.title("Manual vs Vectorised Predictions on Test Set")
+    plt.legend()
+    plt.savefig("results/manual_vs_vectorised_predictions_plot.png")
+
+
 def main():
     VERBOSE = False
-    
+
     # Set random seed for reproducibility
     np.random.seed(cfg.seed)
 
@@ -309,7 +365,7 @@ def main():
     # Initialize model
     model = LinearRegression(
         n_params=n_params,
-        lr=cfg.lr_full,
+        lr=cfg.lr_full_batch,
         weights=weights_vectorised,
         bias=bias_vectorised,
         full_batch=True,
@@ -321,7 +377,7 @@ def main():
         train_set,
         val_set,
         cfg.epochs_manual,
-        cfg.lr_mini,
+        cfg.lr_manual,
         weights_manual,
         bias_manual,
         verbose=VERBOSE,
@@ -331,7 +387,7 @@ def main():
     train_loss_vectorised, val_loss_vectorised = train_vectorised_full_batch(
         model, loss_fn, train_set, val_set, cfg.epochs_full_batch, verbose=VERBOSE
     )
-    
+
     print("Evaluating manual model...")
     test_loss_manual = evaluate_model_manual(weights_manual, bias_manual, test_set)
 
@@ -339,7 +395,6 @@ def main():
     x_test = np.array([item[0] for item in test_set])
     y_test = np.array([item[1] for item in test_set])
     test_loss_vectorised = evaluate_model_full(model, loss_fn, x_test, y_test)
-    
 
     print(f"Manual training loss: {train_loss_manual[-1]:.4f}")
     print(f"Manual validation loss: {val_loss_manual[-1]:.4f}")
@@ -353,10 +408,15 @@ def main():
     print("Manual update steps:", len(train_loss_manual) * len(train_set))
     print("Vectorised update steps:", cfg.epochs_full_batch)
 
-    # plot_results(train_loss_vectorised)
+    plot_predictions_vs_actual(test_set, weights_manual, bias_manual, model)
 
-    plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, "Training Loss")
-    plot_manual_vs_vectorised_loss(val_loss_manual, val_loss_vectorised, "Validation Loss")
+    # Plot training and validation losses
+    plot_manual_vs_vectorised_loss(
+        train_loss_manual, train_loss_vectorised, "Training Loss"
+    )
+    plot_manual_vs_vectorised_loss(
+        val_loss_manual, val_loss_vectorised, "Validation Loss"
+    )
 
 
 if __name__ == "__main__":
