@@ -6,6 +6,37 @@ Implement linear regression to predict house prices.
 ## Dataset
 Use the California Housing dataset from sklearn.datasets.
 
+## Installation
+
+1. Install uv (if not already installed), [uv docs](https://docs.astral.sh/uv/getting-started/installation/)
+:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Clone this repository and navigate to it:
+```bash
+git clone <repository-url>
+cd regression-from-scratch
+```
+
+3. Install dependencies and create virtual environment:
+```bash
+uv sync
+```
+
+## Running the Code
+
+To run any Python script in the project:
+```bash
+uv run <script-name>.py
+```
+
+For example, to run the main implementation:
+```bash
+uv run main.py
+```
+
 ## Tools
 - NumPy
 - Matplotlib
@@ -17,7 +48,7 @@ Use the California Housing dataset from sklearn.datasets.
 - Plots of predictions and training loss
 
 ## Data Preparation
-- Load the dataset (e.g., `load_boston()` or `fetch_california_housing()`)
+- Load the dataset (fetch_california_housing())
 - Normalize features to zero mean and unit variance
 - Split data: 70% training, 15% validation, 15% testing
 - Shuffle data using `np.random.permutation()` before splitting
