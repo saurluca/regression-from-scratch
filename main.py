@@ -7,13 +7,13 @@ from config import cfg
 
 
 class LinearRegression:
-    def __init__(self, n_params, weights=None, bias=1, lr=0.001, batch=False):
+    def __init__(self, n_params, weights=None, bias=1, lr=0.001, full_batch=False):
         self.input = None
         self.bias = bias
         self.weights = weights
         self.lr = lr
-        self.batch = batch
-        
+        self.full_batch = full_batch
+
         if weights is None:
             print("Initial weights are None, generating random weights")
             self.weights = np.random.uniform(-1, 1, n_params)
@@ -21,18 +21,18 @@ class LinearRegression:
     def forward(self, x, no_grad=False):
         if not no_grad:
             self.input = x
-        if self.batch:
+        if self.full_batch:
             return x @ self.weights + self.bias
         else:
             # check if not also @
             return np.dot(x, self.weights) + self.bias
 
     def step(self, grad):
-        if self.batch:
+        if self.full_batch:
             grad_w = (self.input.T @ grad) / len(self.input)
             grad_b = np.mean(grad)
             self.weights = self.weights - self.lr * grad_w
-            self.bias = self.bias - self.lr * grad_b            
+            self.bias = self.bias - self.lr * grad_b
         else:
             self.weights = self.weights - self.lr * grad * self.input
             self.bias = self.bias - self.lr * grad
@@ -127,7 +127,7 @@ def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1):
 
     if weights is None:
         weights = np.random.uniform(-1, 1, n_params)
-        
+
     if bias is None:
         bias = 1
 
@@ -142,11 +142,11 @@ def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1):
                 y_pred += weights[i] * x[i]
 
             y_pred = y_pred + bias
-            
+
             # calculate MSE
             loss = (y_pred - y) ** 2
             running_loss += loss
-            
+
             loss_grad = 2 * (y_pred - y)
 
             # update weights
@@ -206,15 +206,15 @@ def train_vectorised(model, loss_fn, train_set, val_set, epochs):
 def train_vectorised_full(model, loss_fn, train_set, val_set, epochs):
     train_loss_list = []
     val_loss_list = []
-    
+
     # convert train_set to numpy arrays to process in parallel
     x_train = np.array([item[0] for item in train_set])
     y_train = np.array([item[1] for item in train_set])
-    
+
     x_val = np.array([item[0] for item in val_set])
     y_val = np.array([item[1] for item in val_set])
 
-    for epoch in tqdm(range(epochs)):                 
+    for epoch in tqdm(range(epochs)):
         # make prediction
         y_pred = model(x_train)
         # calculate loss
@@ -257,15 +257,15 @@ def plot_results(train_loss):
 
 def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised):
     print("plotting manual vs vectorised loss")
-    plt.figure(figsize=(10,6))
+    plt.figure(figsize=(10, 6))
     plt.plot(train_loss_manual, label="Manual Training Loss")
-    plt.plot(train_loss_vectorised, label="Vectorised Training Loss") 
+    plt.plot(train_loss_vectorised, label="Vectorised Training Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.title("Training Loss Over Epochs")
     plt.legend()
     plt.savefig("results/manual_vs_vectorised_loss_plot.png")
-    
+
 
 def main():
     # Set random seed for reproducibility
@@ -274,30 +274,40 @@ def main():
     train_set, val_set, test_set = load_data(cfg.train_split, cfg.val_split)
 
     n_params = len(train_set[0][0])
-    
+
     # Initialize the same random weights, to ensure fair comparison
     weights_manual = np.random.uniform(-1, 1, n_params)
     bias_manual = 1
-    
+
     # Copy manual weights for vectorized training to ensure fair comparison
     weights_vectorised = weights_manual.copy()
     bias_vectorised = 1
 
     # Initialize model
-    model = LinearRegression(n_params=n_params, lr=cfg.lr_full, weights=weights_vectorised, bias=bias_vectorised, full_batch=True)    
+    model = LinearRegression(
+        n_params=n_params,
+        lr=cfg.lr_full,
+        weights=weights_vectorised,
+        bias=bias_vectorised,
+        full_batch=True,
+    )
     loss_fn = MSE(full_batch=True)
 
     print("Training manual model...")
-    train_loss_manual = train_manual(train_set, val_set, cfg.epochs, cfg.lr_mini, weights_manual, bias_manual)
+    train_loss_manual = train_manual(
+        train_set, val_set, cfg.epochs, cfg.lr_mini, weights_manual, bias_manual
+    )
 
     print("Training vectorised model...")
-    train_loss_vectorised, val_loss_vectorised = train_vectorised_full(model, loss_fn, train_set, val_set, cfg.epochs)
-    
+    train_loss_vectorised, val_loss_vectorised = train_vectorised_full(
+        model, loss_fn, train_set, val_set, cfg.epochs
+    )
+
     # print("Manual training loss:", train_loss_manual[-1])
     print("Vectorised training loss:", train_loss_vectorised[-1])
     print("Vectorised validation loss:", val_loss_vectorised[-1])
     # plot_results(train_loss_vectorised)
-    
+
     plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised)
 
 
