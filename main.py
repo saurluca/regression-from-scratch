@@ -125,9 +125,9 @@ def load_data(train_split, val_split):
 def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1, verbose=False):
     n_params = len(train_set[0][0])
 
+    # init weights and bias if not provided
     if weights is None:
         weights = np.random.uniform(-1, 1, n_params)
-
     if bias is None:
         bias = 1
 
@@ -148,6 +148,7 @@ def train_manual(train_set, val_set, epochs, lr, weights=None, bias=1, verbose=F
             loss = (y_pred - y) ** 2
             running_loss += loss
 
+            # calculate grad of loss
             loss_grad = 2 * (y_pred - y)
 
             # update weights
@@ -251,21 +252,27 @@ def train_vectorised_full_batch(
 
 
 def evaluate_model_full(model, loss_fn, x_test, y_test):
+    # make prediction
     y_pred = model(x_test, no_grad=True)
+    # calculate loss
     loss = loss_fn(y_pred, y_test, no_grad=True)
     return loss
 
 
 def evaluate_model_manual(weights, bias, test_set):
     running_loss = 0.0
+    # Iterate over each data point in the test set
     for x, y in test_set:
         y_pred = 0.0
+        # Calculate prediction using weights and bias
         for i in range(len(weights)):
             y_pred += weights[i] * x[i]
         y_pred = y_pred + bias
+        # Calculate loss for this data point
         loss = (y_pred - y) ** 2
         running_loss += loss
 
+    # Calculate normalised loss by dividing by the number of data points
     normalised_loss = running_loss / len(test_set)
     return normalised_loss
 
@@ -281,9 +288,7 @@ def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, tit
     plt.savefig(f"results/{title}_plot.png")
 
 
-def plot_predictions_vs_actual(
-    test_set, weights_manual, bias_manual, model
-):
+def plot_predictions_vs_actual(test_set, weights_manual, bias_manual, model):
     x_test = np.array([item[0] for item in test_set])
     y_test = np.array([item[1] for item in test_set])
 
