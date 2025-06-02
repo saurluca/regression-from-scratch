@@ -15,8 +15,11 @@ def download_and_load_adult_dataset():
     data_url = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
     test_url = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
 
-    data_path = "adult.data"
-    test_path = "adult.test"
+    data_path = "data/adult_data.csv"
+    test_path = "data/adult_test.csv"
+
+    # Ensure data directory exists
+    os.makedirs(os.path.dirname(data_path), exist_ok=True)
 
     if not os.path.exists(data_path):
         print("Download adult.data ...")

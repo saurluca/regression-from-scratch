@@ -111,6 +111,8 @@ def load_data(train_split, val_split):
     y_val_normed = (y_val - y_train_mean) / y_train_std
     y_test_normed = (y_test - y_train_mean) / y_train_std
 
+    # divide the results by
+
     print(f"Train set size: {len(X_train)}")
     print(f"Validation set size: {len(X_val)}")
     print(f"Test set size: {len(X_test)}")
