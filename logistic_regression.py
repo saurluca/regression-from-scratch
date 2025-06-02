@@ -10,10 +10,15 @@ from config import cfg
 
 # --- Hilfsfunktionen für Daten ---
 
+
 def download_and_load_adult_dataset():
     """Downloads UCI Adult Dataset und als Pandas DataFrame."""
-    data_url = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
-    test_url = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
+    data_url = (
+        "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
+    )
+    test_url = (
+        "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
+    )
 
     data_path = "data/adult_data.csv"
     test_path = "data/adult_test.csv"
@@ -29,22 +34,38 @@ def download_and_load_adult_dataset():
         urlretrieve(test_url, test_path)
 
     columns = [
-        "age", "workclass", "fnlwgt", "education", "education-num",
-        "marital-status", "occupation", "relationship", "race", "sex",
-        "capital-gain", "capital-loss", "hours-per-week", "native-country", "income"
+        "age",
+        "workclass",
+        "fnlwgt",
+        "education",
+        "education-num",
+        "marital-status",
+        "occupation",
+        "relationship",
+        "race",
+        "sex",
+        "capital-gain",
+        "capital-loss",
+        "hours-per-week",
+        "native-country",
+        "income",
     ]
 
     try:
         # Trainingsdaten haben keine Header-Zeile und keine Kommentarzeilen am Anfang
-        df_train = pd.read_csv(data_path, names=columns, na_values="?", skipinitialspace=True)
+        df_train = pd.read_csv(
+            data_path, names=columns, na_values="?", skipinitialspace=True
+        )
         # Testdaten haben eine initiale Kommentarzeile und das Ziel-Label hat einen Punkt am Ende
-        df_test = pd.read_csv(test_path, names=columns, na_values="?", skipinitialspace=True, skiprows=1)
+        df_test = pd.read_csv(
+            test_path, names=columns, na_values="?", skipinitialspace=True, skiprows=1
+        )
     except Exception as e:
         print(f"Fehler beim Lesen der CSV-Dateien: {e}")
         return None
 
     # Korrigiere Ziel-Label im Testset (z.B. ">50K." -> ">50K")
-    df_test['income'] = df_test['income'].str.replace('.', '', regex=False)
+    df_test["income"] = df_test["income"].str.replace(".", "", regex=False)
 
     # Kombiniere für konsistente Vorverarbeitung (insbesondere One-Hot-Encoding)
     df_combined = pd.concat([df_train, df_test], ignore_index=True)
@@ -55,26 +76,43 @@ def preprocess_adult_data(df):
     """Bereitet den Adult DataFrame für die logistische Regression vor."""
     print("Start Dataprocessing...")
     # 1. Fehlende Werte behandeln
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            df[col].fillna(df[col].mode()[0], inplace=True)  # Modus für kategoriale
+    df_copy = df.copy()  # Work with a copy to avoid the pandas warning
+    for col in df_copy.columns:
+        if df_copy[col].dtype == "object":
+            df_copy[col] = df_copy[col].fillna(
+                df_copy[col].mode()[0]
+            )  # Modus für kategoriale
         else:
-            df[col].fillna(df[col].median(), inplace=True)  # Median für numerische
+            df_copy[col] = df_copy[col].fillna(
+                df_copy[col].median()
+            )  # Median für numerische
 
     # 2. Kategoriale Variablen in numerische umwandeln (One-Hot Encoding)
-    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+    categorical_cols = df_copy.select_dtypes(include=["object"]).columns.tolist()
     # Zielvariable 'income' ist auch 'object', behandle sie separat
-    if 'income' in categorical_cols:
-        categorical_cols.remove('income')
+    if "income" in categorical_cols:
+        categorical_cols.remove("income")
 
-    df = pd.get_dummies(df, columns=categorical_cols, drop_first=True)
+    df_encoded = pd.get_dummies(df_copy, columns=categorical_cols, drop_first=True)
 
     # 3. Zielvariable umwandeln: >50K -> 1, <=50K -> 0
-    df['income'] = df['income'].apply(lambda x: 1 if x.strip() == '>50K' else 0)
+    df_encoded["income"] = df_encoded["income"].apply(
+        lambda x: 1 if x.strip() == ">50K" else 0
+    )
 
-    y = df['income'].values
-    X = df.drop('income', axis=1).values
+    y = df_encoded["income"].values
+    X_df = df_encoded.drop("income", axis=1)
+
+    # Ensure all columns are numeric
+    for col in X_df.columns:
+        X_df[col] = pd.to_numeric(X_df[col], errors="coerce")
+
+    # Fill any NaN values that might have been created during conversion
+    X_df = X_df.fillna(0)
+
+    X = X_df.values.astype(np.float64)  # Explicitly convert to float64
     print(f"Form von X nach One-Hot-Encoding (vor Normalisierung): {X.shape}")
+    print(f"X dtype: {X.dtype}")
 
     # 4. Kontinuierliche Features normalisieren (alle Spalten in X sind jetzt numerisch)
     #    Wichtig: Normalisierungsparameter (mean, std) nur auf Trainingsdaten berechnen
@@ -88,7 +126,9 @@ def preprocess_adult_data(df):
     X_normalized = (X - mean_X) / std_X
 
     # 5. Bias-Term x0 = 1 hinzufügen
-    X_final = np.concatenate([np.ones((X_normalized.shape[0], 1)), X_normalized], axis=1)
+    X_final = np.concatenate(
+        [np.ones((X_normalized.shape[0], 1)), X_normalized], axis=1
+    )
     print(f"Form von X nach Hinzufügen des Bias-Terms: {X_final.shape}")
 
     # 6. Daten mischen und aufteilen
@@ -103,7 +143,10 @@ def preprocess_adult_data(df):
     val_end_idx = train_end_idx + int(cfg.val_split * num_samples)
 
     X_train, y_train = X_shuffled[:train_end_idx], y_shuffled[:train_end_idx]
-    X_val, y_val = X_shuffled[train_end_idx:val_end_idx], y_shuffled[train_end_idx:val_end_idx]
+    X_val, y_val = (
+        X_shuffled[train_end_idx:val_end_idx],
+        y_shuffled[train_end_idx:val_end_idx],
+    )
     X_test, y_test = X_shuffled[val_end_idx:], y_shuffled[val_end_idx:]
 
     print("Datenvorverarbeitung abgeschlossen.")
@@ -116,6 +159,7 @@ def preprocess_adult_data(df):
 
 # --- Kernfunktionen für Logistische Regression ---
 
+
 def sigmoid(z):
     """Sigmoid-Aktivierungsfunktion."""
     return 1 / (1 + np.exp(-z))
@@ -126,7 +170,9 @@ def binary_cross_entropy_loss(y_true, y_pred_proba):
     epsilon = 1e-15  # Um log(0) zu vermeiden
     y_pred_proba = np.clip(y_pred_proba, epsilon, 1 - epsilon)
     m = len(y_true)
-    cost = (-1 / m) * np.sum(y_true * np.log(y_pred_proba) + (1 - y_true) * np.log(1 - y_pred_proba))
+    cost = (-1 / m) * np.sum(
+        y_true * np.log(y_pred_proba) + (1 - y_true) * np.log(1 - y_pred_proba)
+    )
     return cost
 
 
@@ -148,7 +194,9 @@ def logistic_regression_gd_non_vectorized(X_train, y_train, X_val, y_val):
     train_acc_history = []
     val_acc_history = []
 
-    print(f"Starte nicht-vektorisiertes Training: LR={cfg.lr_logistic_manual}, Epochen={cfg.epochs_logistic_manual}")
+    print(
+        f"Starte nicht-vektorisiertes Training: LR={cfg.lr_logistic_manual}, Epochen={cfg.epochs_logistic_manual}"
+    )
 
     for epoch in range(cfg.epochs_logistic_manual):
         gradients = np.zeros(n)
@@ -184,11 +232,20 @@ def logistic_regression_gd_non_vectorized(X_train, y_train, X_val, y_val):
         val_loss_history.append(current_val_loss)
         val_acc_history.append(current_val_acc)
 
-        if (epoch + 1) % (cfg.epochs_logistic_manual // 10 or 1) == 0:  # Ca. 10 Mal ausgeben
+        if (epoch + 1) % (
+            cfg.epochs_logistic_manual // 10 or 1
+        ) == 0:  # Ca. 10 Mal ausgeben
             print(
-                f"  Epoch {epoch + 1}/{cfg.epochs_logistic_manual} - Train Loss: {current_train_loss:.4f}, Val Loss: {current_val_loss:.4f}, Train Acc: {current_train_acc:.4f}, Val Acc: {current_val_acc:.4f}")
+                f"  Epoch {epoch + 1}/{cfg.epochs_logistic_manual} - Train Loss: {current_train_loss:.4f}, Val Loss: {current_val_loss:.4f}, Train Acc: {current_train_acc:.4f}, Val Acc: {current_val_acc:.4f}"
+            )
 
-    return theta, train_loss_history, val_loss_history, train_acc_history, val_acc_history
+    return (
+        theta,
+        train_loss_history,
+        val_loss_history,
+        train_acc_history,
+        val_acc_history,
+    )
 
 
 # --- Vektorisierte Implementierung ---
@@ -202,7 +259,9 @@ def logistic_regression_gd_vectorized(X_train, y_train, X_val, y_val):
     train_acc_history = []
     val_acc_history = []
 
-    print(f"Starte vektorisiertes Training: LR={cfg.lr_logistic_full_batch}, Epochen={cfg.epochs_logistic_full_batch}")
+    print(
+        f"Starte vektorisiertes Training: LR={cfg.lr_logistic_full_batch}, Epochen={cfg.epochs_logistic_full_batch}"
+    )
 
     for epoch in range(cfg.epochs_logistic_full_batch):
         z_train = np.dot(X_train, theta)
@@ -226,20 +285,29 @@ def logistic_regression_gd_vectorized(X_train, y_train, X_val, y_val):
         val_loss_history.append(current_val_loss)
         val_acc_history.append(current_val_acc)
 
-        if (epoch + 1) % (cfg.epochs_logistic_full_batch // 10 or 1) == 0:  # Ca. 10 Mal ausgeben
+        if (epoch + 1) % (
+            cfg.epochs_logistic_full_batch // 10 or 1
+        ) == 0:  # Ca. 10 Mal ausgeben
             print(
-                f"  Epoch {epoch + 1}/{cfg.epochs_logistic_full_batch} - Train Loss: {current_train_loss:.4f}, Val Loss: {current_val_loss:.4f}, Train Acc: {current_train_acc:.4f}, Val Acc: {current_val_acc:.4f}")
+                f"  Epoch {epoch + 1}/{cfg.epochs_logistic_full_batch} - Train Loss: {current_train_loss:.4f}, Val Loss: {current_val_loss:.4f}, Train Acc: {current_train_acc:.4f}, Val Acc: {current_val_acc:.4f}"
+            )
 
-    return theta, train_loss_history, val_loss_history, train_acc_history, val_acc_history
+    return (
+        theta,
+        train_loss_history,
+        val_loss_history,
+        train_acc_history,
+        val_acc_history,
+    )
 
 
 # --- Plotting und Evaluierungsfunktionen ---
 def plot_learning_curves(train_hist, val_hist, title, ylabel, filename_suffix):
     plt.figure(figsize=(10, 6))
-    plt.plot(train_hist, label=f'Training {ylabel}')
-    plt.plot(val_hist, label=f'Validation {ylabel}')
+    plt.plot(train_hist, label=f"Training {ylabel}")
+    plt.plot(val_hist, label=f"Validation {ylabel}")
     plt.title(title)
-    plt.xlabel('Epochen')
+    plt.xlabel("Epochen")
     plt.ylabel(ylabel)
     plt.legend()
     plt.grid(True)
@@ -263,7 +331,11 @@ def evaluate_model_on_test_set(theta, X_test, y_test):
     accuracy = (tp + tn) / len(y_test) if len(y_test) > 0 else 0
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    f1_score = (
+        2 * (precision * recall) / (precision + recall)
+        if (precision + recall) > 0
+        else 0
+    )
 
     print(f"  Test Genauigkeit: {accuracy:.4f}")
     print(f"  Test Präzision: {precision:.4f}")
@@ -273,25 +345,30 @@ def evaluate_model_on_test_set(theta, X_test, y_test):
     # Confusion Matrix Plotten
     cm = np.array([[tn, fp], [fn, tp]])
     plt.figure(figsize=(6, 5))
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.title('Confusion Matrix (Test Set)')
+    plt.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix (Test Set)")
     plt.colorbar()
     tick_marks = np.arange(2)
     plt.xticks(tick_marks, ["Pred <=50K", "Pred >50K"])
     plt.yticks(tick_marks, ["Actual <=50K", "Actual >50K"])
 
-    thresh = cm.max() / 2.
+    thresh = cm.max() / 2.0
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
-            plt.text(j, i, format(cm[i, j], 'd'),
-                     horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
+            plt.text(
+                j,
+                i,
+                format(cm[i, j], "d"),
+                horizontalalignment="center",
+                color="white" if cm[i, j] > thresh else "black",
+            )
 
     plt.tight_layout()
-    plt.ylabel('Wahre Klasse')
-    plt.xlabel('Vorhergesagte Klasse')
-    filepath = os.path.join(cfg.results_dir_logistic,
-                            "confusion_matrix_test.png")  # Einmalig für beide Versionen, wenn Theta ähnlich
+    plt.ylabel("Wahre Klasse")
+    plt.xlabel("Vorhergesagte Klasse")
+    filepath = os.path.join(
+        cfg.results_dir_logistic, "confusion_matrix_test.png"
+    )  # Einmalig für beide Versionen, wenn Theta ähnlich
     # Man könnte auch separate CMs für non-vec und vec speichern, wenn man will
     plt.savefig(filepath)
     print(f"Confusion Matrix gespeichert: {filepath}")
@@ -320,14 +397,28 @@ if __name__ == "__main__":
     # --- Nicht-vektorisierte Implementierung ---
     print("\n--- Training Nicht-Vektorisierte Logistische Regression ---")
     start_time_non_vec = time.time()
-    theta_nv, tl_nv, vl_nv, ta_nv, va_nv = logistic_regression_gd_non_vectorized(X_train, y_train, X_val, y_val)
+    theta_nv, tl_nv, vl_nv, ta_nv, va_nv = logistic_regression_gd_non_vectorized(
+        X_train, y_train, X_val, y_val
+    )
     end_time_non_vec = time.time()
-    print(f"Trainingszeit (Nicht-Vektorisiert): {end_time_non_vec - start_time_non_vec:.2f} Sekunden")
+    print(
+        f"Trainingszeit (Nicht-Vektorisiert): {end_time_non_vec - start_time_non_vec:.2f} Sekunden"
+    )
 
-    plot_learning_curves(tl_nv, vl_nv, 'Nicht-Vektorisiert: Verlust vs. Epochen', 'Verlust (Binary Cross-Entropy)',
-                         'loss_non_vectorized_logistic')
-    plot_learning_curves(ta_nv, va_nv, 'Nicht-Vektorisiert: Genauigkeit vs. Epochen', 'Genauigkeit',
-                         'accuracy_non_vectorized_logistic')
+    plot_learning_curves(
+        tl_nv,
+        vl_nv,
+        "Nicht-Vektorisiert: Verlust vs. Epochen",
+        "Verlust (Binary Cross-Entropy)",
+        "loss_non_vectorized_logistic",
+    )
+    plot_learning_curves(
+        ta_nv,
+        va_nv,
+        "Nicht-Vektorisiert: Genauigkeit vs. Epochen",
+        "Genauigkeit",
+        "accuracy_non_vectorized_logistic",
+    )
 
     print("\nEvaluierung des nicht-vektorisierten Modells auf dem Testset:")
     evaluate_model_on_test_set(theta_nv, X_test, y_test)
@@ -335,24 +426,37 @@ if __name__ == "__main__":
     # --- Vektorisierte Implementierung ---
     print("\n--- Training Vektorisierte Logistische Regression ---")
     start_time_vec = time.time()
-    theta_v, tl_v, vl_v, ta_v, va_v = logistic_regression_gd_vectorized(X_train, y_train, X_val, y_val)
+    theta_v, tl_v, vl_v, ta_v, va_v = logistic_regression_gd_vectorized(
+        X_train, y_train, X_val, y_val
+    )
     end_time_vec = time.time()
     print(f"Trainingszeit (Vektorisiert): {end_time_vec - start_time_vec:.2f} Sekunden")
 
-    plot_learning_curves(tl_v, vl_v, 'Vektorisiert: Verlust vs. Epochen', 'Verlust (Binary Cross-Entropy)',
-                         'loss_vectorized_logistic')
-    plot_learning_curves(ta_v, va_v, 'Vektorisiert: Genauigkeit vs. Epochen', 'Genauigkeit',
-                         'accuracy_vectorized_logistic')
+    plot_learning_curves(
+        tl_v,
+        vl_v,
+        "Vektorisiert: Verlust vs. Epochen",
+        "Verlust (Binary Cross-Entropy)",
+        "loss_vectorized_logistic",
+    )
+    plot_learning_curves(
+        ta_v,
+        va_v,
+        "Vektorisiert: Genauigkeit vs. Epochen",
+        "Genauigkeit",
+        "accuracy_vectorized_logistic",
+    )
 
     print("\nEvaluierung des vektorisierten Modells auf dem Testset:")
     # Wir können dieselbe Funktion verwenden, da das Theta der vektorisierten Version wahrscheinlich besser ist.
     # Wenn man beide Thetas getrennt evaluieren will, kann man die CM anders benennen.
     evaluate_model_on_test_set(theta_v, X_test, y_test)
 
-    print(f"\nVergleich der Trainingszeiten:")
+    print("\nVergleich der Trainingszeiten:")
     print(f"  Nicht-Vektorisiert: {end_time_non_vec - start_time_non_vec:.2f}s")
     print(f"  Vektorisiert:       {end_time_vec - start_time_vec:.2f}s")
 
     print(
-        f"\nAlle Ergebnisse und Plots der logistischen Regression wurden in '{cfg.results_dir_logistic}' gespeichert.")
+        f"\nAlle Ergebnisse und Plots der logistischen Regression wurden in '{cfg.results_dir_logistic}' gespeichert."
+    )
     print("Logistische Regression Assignment Teil abgeschlossen.")
