@@ -286,15 +286,17 @@ def evaluate_model_manual(weights, bias, test_set):
     return normalised_loss
 
 
-def plot_manual_vs_vectorised_loss(train_loss_manual, train_loss_vectorised, title):
+def plot_train_vs_validation_loss(train_loss, val_loss, title, filename):
     plt.figure(figsize=(10, 6))
-    plt.plot(train_loss_manual, label="Manual Training Loss")
-    plt.plot(train_loss_vectorised, label="Vectorised Training Loss")
+    plt.plot(train_loss, label="Training Loss", color="blue")
+    plt.plot(val_loss, label="Validation Loss", color="red")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.title(title)
     plt.legend()
-    plt.savefig(f"results/{title}_plot.png")
+    plt.grid(True, alpha=0.3)
+    plt.savefig(f"results/{filename}.png")
+    plt.close()  # Close the figure to free memory
 
 
 def plot_predictions_vs_actual(test_set, weights_manual, bias_manual, model):
@@ -424,12 +426,18 @@ def main():
 
     plot_predictions_vs_actual(test_set, weights_manual, bias_manual, model)
 
-    # Plot training and validation losses
-    plot_manual_vs_vectorised_loss(
-        train_loss_manual, train_loss_vectorised, "Training Loss"
+    # Plot training vs validation losses for each method separately
+    plot_train_vs_validation_loss(
+        train_loss_manual,
+        val_loss_manual,
+        "Manual Implementation: Training vs Validation Loss",
+        "manual_train_vs_val_loss",
     )
-    plot_manual_vs_vectorised_loss(
-        val_loss_manual, val_loss_vectorised, "Validation Loss"
+    plot_train_vs_validation_loss(
+        train_loss_vectorised,
+        val_loss_vectorised,
+        "Vectorised Implementation: Training vs Validation Loss",
+        "vectorised_train_vs_val_loss",
     )
 
 
