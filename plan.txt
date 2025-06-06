@@ -1,0 +1,11 @@
+Todos:
+
+Regression:
+- Find out why learing rate so high and fix
+    - probalby normasltion by batch length
+    - move to notebook
+
+
+Logistic Regression:
+- check through hajars code or write myself
+- convert to ipynb

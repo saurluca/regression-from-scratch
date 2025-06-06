@@ -29,8 +29,14 @@ class LinearRegression:
 
     def step(self, grad):
         if self.full_batch:
-            grad_w = (self.input.T @ grad) / len(self.input)
+            grad_w = self.input.T @ grad
+            # / len(self.input)
             grad_b = np.mean(grad)
+
+            # Clip gradients to prevent overflow
+            grad_w = np.clip(grad_w, -10, 10)
+            grad_b = np.clip(grad_b, -10, 10)
+
             self.weights = self.weights - self.lr * grad_w
             self.bias = self.bias - self.lr * grad_b
         else:
@@ -58,7 +64,8 @@ class MSE:
 
     def backward(self):
         if self.full_batch:
-            grad = 2 * (self.y_pred - self.y) / len(self.y)
+            grad = 2 * (self.y_pred - self.y)
+            # / len(self.y)
         else:
             grad = 2 * (self.y_pred - self.y)
         return grad
